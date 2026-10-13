@@ -10,16 +10,14 @@ import (
 )
 
 type Client struct {
-	baseURL  string
-	baseCurr string
-	http     *http.Client
+	baseURL string
+	http    *http.Client
 }
 
-func New(baseURL, baseCurrency string, timeout time.Duration) *Client {
+func New(baseURL string, timeout time.Duration) *Client {
 	return &Client{
-		baseURL:  strings.TrimRight(baseURL, "/"),
-		baseCurr: strings.ToUpper(baseCurrency),
-		http:     &http.Client{Timeout: timeout},
+		baseURL: strings.TrimRight(baseURL, "/"),
+		http:    &http.Client{Timeout: timeout},
 	}
 }
 
@@ -29,16 +27,13 @@ type latestResponse struct {
 	Rates map[string]float64 `json:"rates"`
 }
 
-func (c *Client) LatestRates(ctx context.Context, currencies []string) (map[string]float64, error) {
-	symbols := make([]string, 0, len(currencies))
-	for _, curr := range currencies {
+func (c *Client) LatestRates(ctx context.Context, base string, quotes []string) (map[string]float64, error) {
+	symbols := make([]string, 0, len(quotes))
+	for _, curr := range quotes {
 		symbols = append(symbols, strings.ToUpper(curr))
 	}
 
-	url := fmt.Sprintf("%s/latest?base=%s&symbols=%s", c.baseURL, c.baseCurr, strings.Join(symbols, ","))
-	if len(symbols) == 0 {
-		url = fmt.Sprintf("%s/latest?base=%s", c.baseURL, c.baseCurr)
-	}
+	url := fmt.Sprintf("%s/latest?base=%s&symbols=%s", c.baseURL, strings.ToUpper(base), strings.Join(symbols, ","))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

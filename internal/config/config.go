@@ -31,7 +31,6 @@ type Config struct {
 	}
 	Exchange struct {
 		BaseURL       string        `envconfig:"EXCHANGE_BASE_URL" default:"https://api.frankfurter.dev/v1"`
-		BaseCurrency  string        `envconfig:"EXCHANGE_BASE_CURRENCY" default:"USD"`
 		Timeout       time.Duration `envconfig:"EXCHANGE_TIMEOUT" default:"10s"`
 		SupportedList []string      `envconfig:"EXCHANGE_SUPPORTED" default:"EUR,MXN"`
 	}

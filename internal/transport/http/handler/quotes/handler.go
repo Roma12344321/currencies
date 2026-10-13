@@ -16,14 +16,14 @@ import (
 )
 
 var (
-	errInvalidCurrency  = errors.New("invalid currency")
+	errInvalidPair      = errors.New("invalid pair")
 	errInvalidRequestID = errors.New("invalid request id")
 )
 
 type Service interface {
-	CreateQuoteRequest(ctx context.Context, currency string) (domain.QuoteRequest, bool, error)
+	CreateQuoteRequest(ctx context.Context, pair domain.Pair) (domain.QuoteRequest, bool, error)
 	GetQuote(ctx context.Context, requestID uuid.UUID) (domain.Quote, error)
-	GetLastQuote(ctx context.Context, currency string) (domain.Quote, error)
+	GetLastQuote(ctx context.Context, pair domain.Pair) (domain.Quote, error)
 }
 
 type Handler struct {
@@ -42,31 +42,30 @@ type CreateQuoteRequestResponse struct {
 }
 
 type QuoteResponse struct {
-	Currency  string    `json:"currency"`
+	Pair      string    `json:"pair"`
 	Price     float64   `json:"price"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // @Summary      Обновить котировку
-// @Description  Регистрирует асинхронный запрос обновления котировки валюты и возвращает его идентификатор.
-// @Description  Повторный вызов с той же валютой при незавершённом запросе возвращает существующий идентификатор.
+// @Description  Регистрирует асинхронный запрос обновления котировки валютной пары и возвращает его идентификатор.
+// @Description  Повторный вызов с той же парой при незавершённом запросе возвращает существующий идентификатор.
 // @Tags         quotes
 // @Produce      json
-// @Param        currency  query  string  true  "Код валюты (EUR, MXN)"  example(EUR)
-// @Success      202  {object}  common.Response{data=CreateQuoteRequestResponse} "Запрос принят"
-// @Failure      400  {object}  common.Response  "Некорректный код валюты"
-// @Failure      500  {object}  common.Response  "Внутренняя ошибка сервера"
+// @Param        pair  query  string  true  "Валютная пара BASE/QUOTE"  example(EUR/MXN)
+// @Success      202   {object}  common.Response{data=CreateQuoteRequestResponse} "Запрос принят"
+// @Failure      400   {object}  common.Response  "Некорректная или неподдерживаемая пара"
+// @Failure      500   {object}  common.Response  "Внутренняя ошибка сервера"
 // @Router       /api/v1/quotes [post]
 func (h *Handler) CreateQuoteRequest(c *echo.Context) error {
-	currency := c.QueryParam("currency")
-
-	if currency == "" {
-		return common.BadRequestError(errInvalidCurrency)
+	pair, err := domain.ParsePair(c.QueryParam("pair"))
+	if err != nil {
+		return common.BadRequestError(errInvalidPair)
 	}
 
-	request, created, err := h.service.CreateQuoteRequest(c.Request().Context(), currency)
+	request, created, err := h.service.CreateQuoteRequest(c.Request().Context(), pair)
 	if err != nil {
-		if errors.Is(err, domain.ErrCurrencyNotSupported) {
+		if errors.Is(err, domain.ErrPairNotSupported) {
 			return common.BadRequestError(err)
 		}
 
@@ -108,32 +107,31 @@ func (h *Handler) GetQuote(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, common.Response{Data: QuoteResponse{
-		Currency:  quote.Currency,
+		Pair:      quote.Pair.String(),
 		Price:     quote.Price,
 		UpdatedAt: quote.UpdatedAt,
 	}})
 }
 
 // @Summary      Получить последнее значение котировки
-// @Description  Возвращает последнее сохранённое значение цены и время обновления по коду валюты
+// @Description  Возвращает последнее сохранённое значение цены и время обновления по валютной паре
 // @Tags         quotes
 // @Produce      json
-// @Param        currency  query  string  true  "Код валюты (EUR, MXN)"  example(EUR)
-// @Success      200  {object}  common.Response{data=QuoteResponse} "Значение котировки"
-// @Failure      400  {object}  common.Response  "Некорректный код валюты"
-// @Failure      404  {object}  common.Response  "Котировка не найдена"
-// @Failure      500  {object}  common.Response  "Внутренняя ошибка сервера"
+// @Param        pair  query  string  true  "Валютная пара BASE/QUOTE"  example(EUR/MXN)
+// @Success      200   {object}  common.Response{data=QuoteResponse} "Значение котировки"
+// @Failure      400   {object}  common.Response  "Некорректная или неподдерживаемая пара"
+// @Failure      404   {object}  common.Response  "Котировка не найдена"
+// @Failure      500   {object}  common.Response  "Внутренняя ошибка сервера"
 // @Router       /api/v1/quotes/last [get]
 func (h *Handler) GetLastQuote(c *echo.Context) error {
-	currency := c.QueryParam("currency")
-
-	if currency == "" {
-		return common.BadRequestError(errInvalidCurrency)
+	pair, err := domain.ParsePair(c.QueryParam("pair"))
+	if err != nil {
+		return common.BadRequestError(errInvalidPair)
 	}
 
-	quote, err := h.service.GetLastQuote(c.Request().Context(), currency)
+	quote, err := h.service.GetLastQuote(c.Request().Context(), pair)
 	if err != nil {
-		if errors.Is(err, domain.ErrCurrencyNotSupported) {
+		if errors.Is(err, domain.ErrPairNotSupported) {
 			return common.BadRequestError(err)
 		}
 
@@ -145,7 +143,7 @@ func (h *Handler) GetLastQuote(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, common.Response{Data: QuoteResponse{
-		Currency:  quote.Currency,
+		Pair:      quote.Pair.String(),
 		Price:     quote.Price,
 		UpdatedAt: quote.UpdatedAt,
 	}})

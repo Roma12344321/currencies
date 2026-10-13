@@ -62,6 +62,8 @@ func (s *HandlerTest) decode(rec *httptest.ResponseRecorder) map[string]any {
 }
 
 func (s *HandlerTest) Test_CreateQuoteRequest() {
+	pair := domain.Pair{Base: "EUR", Quote: "MXN"}
+
 	tt := []struct {
 		name       string
 		target     string
@@ -71,13 +73,13 @@ func (s *HandlerTest) Test_CreateQuoteRequest() {
 	}{
 		{
 			name:   "created",
-			target: "/api/v1/quotes?currency=EUR",
+			target: "/api/v1/quotes?pair=EUR/MXN",
 			mocksInit: func() {
 				s.service.EXPECT().
-					CreateQuoteRequest(gomock.Any(), "EUR").
+					CreateQuoteRequest(gomock.Any(), pair).
 					Return(domain.QuoteRequest{
 						ID:        uuid.NewV7(),
-						Currency:  "EUR",
+						Pair:      pair,
 						Status:    domain.RequestStatusPending,
 						CreatedAt: time.Now(),
 					}, true, nil)
@@ -86,33 +88,39 @@ func (s *HandlerTest) Test_CreateQuoteRequest() {
 			expCreated: true,
 		},
 		{
-			name:   "idempotent",
-			target: "/api/v1/quotes?currency=EUR",
+			name:   "lowercase pair normalized",
+			target: "/api/v1/quotes?pair=eur/mxn",
 			mocksInit: func() {
 				s.service.EXPECT().
-					CreateQuoteRequest(gomock.Any(), "EUR").
+					CreateQuoteRequest(gomock.Any(), pair).
 					Return(domain.QuoteRequest{
-						ID:       uuid.NewV7(),
-						Currency: "EUR",
-						Status:   domain.RequestStatusPending,
+						ID:     uuid.NewV7(),
+						Pair:   pair,
+						Status: domain.RequestStatusPending,
 					}, false, nil)
 			},
 			expCode:    http.StatusAccepted,
 			expCreated: false,
 		},
 		{
-			name:   "unsupported currency",
-			target: "/api/v1/quotes?currency=JPY",
+			name:   "unsupported pair",
+			target: "/api/v1/quotes?pair=JPY/EUR",
 			mocksInit: func() {
 				s.service.EXPECT().
-					CreateQuoteRequest(gomock.Any(), "JPY").
-					Return(domain.QuoteRequest{}, false, domain.ErrCurrencyNotSupported)
+					CreateQuoteRequest(gomock.Any(), domain.Pair{Base: "JPY", Quote: "EUR"}).
+					Return(domain.QuoteRequest{}, false, domain.ErrPairNotSupported)
 			},
 			expCode: http.StatusBadRequest,
 		},
 		{
-			name:      "empty currency",
+			name:      "missing pair",
 			target:    "/api/v1/quotes",
+			mocksInit: func() {},
+			expCode:   http.StatusBadRequest,
+		},
+		{
+			name:      "invalid format",
+			target:    "/api/v1/quotes?pair=EUR",
 			mocksInit: func() {},
 			expCode:   http.StatusBadRequest,
 		},
@@ -139,6 +147,7 @@ func (s *HandlerTest) Test_CreateQuoteRequest() {
 
 func (s *HandlerTest) Test_GetQuote() {
 	requestID := uuid.NewV7()
+	pair := domain.Pair{Base: "EUR", Quote: "MXN"}
 
 	tt := []struct {
 		name      string
@@ -152,7 +161,7 @@ func (s *HandlerTest) Test_GetQuote() {
 			mocksInit: func() {
 				s.service.EXPECT().
 					GetQuote(gomock.Any(), requestID).
-					Return(domain.Quote{Currency: "EUR", Price: 0.9, UpdatedAt: time.Now()}, nil)
+					Return(domain.Quote{Pair: pair, Price: 18.5, UpdatedAt: time.Now()}, nil)
 			},
 			expCode: http.StatusOK,
 		},
@@ -194,13 +203,15 @@ func (s *HandlerTest) Test_GetQuote() {
 
 			if tc.expCode == http.StatusOK {
 				data := s.decode(rec)
-				s.Equal("EUR", data["currency"])
+				s.Equal("EUR/MXN", data["pair"])
 			}
 		})
 	}
 }
 
 func (s *HandlerTest) Test_GetLastQuote() {
+	pair := domain.Pair{Base: "EUR", Quote: "MXN"}
+
 	tt := []struct {
 		name      string
 		target    string
@@ -209,37 +220,37 @@ func (s *HandlerTest) Test_GetLastQuote() {
 	}{
 		{
 			name:   "found",
-			target: "/api/v1/quotes/last?currency=MXN",
+			target: "/api/v1/quotes/last?pair=EUR/MXN",
 			mocksInit: func() {
 				s.service.EXPECT().
-					GetLastQuote(gomock.Any(), "MXN").
-					Return(domain.Quote{Currency: "MXN", Price: 18.5, UpdatedAt: time.Now()}, nil)
+					GetLastQuote(gomock.Any(), pair).
+					Return(domain.Quote{Pair: pair, Price: 18.5, UpdatedAt: time.Now()}, nil)
 			},
 			expCode: http.StatusOK,
 		},
 		{
-			name:      "empty currency",
+			name:      "missing pair",
 			target:    "/api/v1/quotes/last",
 			mocksInit: func() {},
 			expCode:   http.StatusBadRequest,
 		},
 		{
 			name:   "not found",
-			target: "/api/v1/quotes/last?currency=EUR",
+			target: "/api/v1/quotes/last?pair=EUR/MXN",
 			mocksInit: func() {
 				s.service.EXPECT().
-					GetLastQuote(gomock.Any(), "EUR").
+					GetLastQuote(gomock.Any(), pair).
 					Return(domain.Quote{}, domain.ErrQuoteNotFound)
 			},
 			expCode: http.StatusNotFound,
 		},
 		{
 			name:   "unsupported",
-			target: "/api/v1/quotes/last?currency=GBP",
+			target: "/api/v1/quotes/last?pair=EUR/JPY",
 			mocksInit: func() {
 				s.service.EXPECT().
-					GetLastQuote(gomock.Any(), "GBP").
-					Return(domain.Quote{}, domain.ErrCurrencyNotSupported)
+					GetLastQuote(gomock.Any(), domain.Pair{Base: "EUR", Quote: "JPY"}).
+					Return(domain.Quote{}, domain.ErrPairNotSupported)
 			},
 			expCode: http.StatusBadRequest,
 		},
@@ -255,7 +266,7 @@ func (s *HandlerTest) Test_GetLastQuote() {
 
 			if tc.expCode == http.StatusOK {
 				data := s.decode(rec)
-				s.Equal("MXN", data["currency"])
+				s.Equal("EUR/MXN", data["pair"])
 			}
 		})
 	}

@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS quote_requests
 (
     id         UUID PRIMARY KEY,
-    currency   VARCHAR(3)    NOT NULL,
+    pair       VARCHAR(7)    NOT NULL,
     status     VARCHAR(20)   NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ   NOT NULL DEFAULT now()
@@ -11,10 +11,10 @@ CREATE INDEX IF NOT EXISTS idx_quote_requests_pending ON quote_requests (created
 
 CREATE TABLE IF NOT EXISTS quotes
 (
-    currency   VARCHAR(3)  NOT NULL,
+    pair       VARCHAR(7)  NOT NULL,
     price      NUMERIC     NOT NULL,
     request_id UUID        NOT NULL REFERENCES quote_requests (id) ON DELETE CASCADE,
     updated_at TIMESTAMPTZ NOT NULL,
 
-    PRIMARY KEY (currency)
+    PRIMARY KEY (pair)
 );

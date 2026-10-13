@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/api/v1/quotes": {
             "post": {
-                "description": "Регистрирует асинхронный запрос обновления котировки валюты и возвращает его идентификатор.\nПовторный вызов с той же валютой при незавершённом запросе возвращает существующий идентификатор.",
+                "description": "Регистрирует асинхронный запрос обновления котировки валютной пары и возвращает его идентификатор.\nПовторный вызов с той же парой при незавершённом запросе возвращает существующий идентификатор.",
                 "produces": [
                     "application/json"
                 ],
@@ -28,9 +28,9 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "example": "EUR",
-                        "description": "Код валюты (EUR, MXN)",
-                        "name": "currency",
+                        "example": "EUR/MXN",
+                        "description": "Валютная пара BASE/QUOTE",
+                        "name": "pair",
                         "in": "query",
                         "required": true
                     }
@@ -55,7 +55,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Некорректный код валюты",
+                        "description": "Некорректная или неподдерживаемая пара",
                         "schema": {
                             "$ref": "#/definitions/common.Response"
                         }
@@ -71,7 +71,7 @@ const docTemplate = `{
         },
         "/api/v1/quotes/last": {
             "get": {
-                "description": "Возвращает последнее сохранённое значение цены и время обновления по коду валюты",
+                "description": "Возвращает последнее сохранённое значение цены и время обновления по валютной паре",
                 "produces": [
                     "application/json"
                 ],
@@ -82,9 +82,9 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "example": "EUR",
-                        "description": "Код валюты (EUR, MXN)",
-                        "name": "currency",
+                        "example": "EUR/MXN",
+                        "description": "Валютная пара BASE/QUOTE",
+                        "name": "pair",
                         "in": "query",
                         "required": true
                     }
@@ -109,7 +109,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Некорректный код валюты",
+                        "description": "Некорректная или неподдерживаемая пара",
                         "schema": {
                             "$ref": "#/definitions/common.Response"
                         }
@@ -223,7 +223,7 @@ const docTemplate = `{
         "quotes.QuoteResponse": {
             "type": "object",
             "properties": {
-                "currency": {
+                "pair": {
                     "type": "string"
                 },
                 "price": {

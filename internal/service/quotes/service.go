@@ -19,17 +19,17 @@ import (
 )
 
 type ExchangeClient interface {
-	LatestRates(ctx context.Context, currencies []string) (map[string]float64, error)
+	LatestRates(ctx context.Context, base string, quotes []string) (map[string]float64, error)
 }
 
 type Storage interface {
 	CreateQuoteRequest(ctx context.Context, request domain.QuoteRequest) error
 	GetQuoteRequest(ctx context.Context, requestID uuid.UUID) (domain.QuoteRequest, error)
-	GetActiveRequest(ctx context.Context, currency string) (domain.QuoteRequest, error)
+	GetActiveRequest(ctx context.Context, pair domain.Pair) (domain.QuoteRequest, error)
 	GetQuoteByRequestID(ctx context.Context, requestID uuid.UUID) (domain.Quote, error)
 	MarkProcessed(ctx context.Context, requestID uuid.UUID, status domain.RequestStatus) error
 	SaveQuote(ctx context.Context, quote domain.Quote) error
-	GetLastQuote(ctx context.Context, currency string) (domain.Quote, error)
+	GetLastQuote(ctx context.Context, pair domain.Pair) (domain.Quote, error)
 	ClaimPendingRequests(ctx context.Context, limit int) ([]domain.QuoteRequest, error)
 }
 
@@ -66,19 +66,26 @@ func New(
 	}
 }
 
+func (s *Service) pairSupported(pair domain.Pair) bool {
+	_, baseOK := s.supported[pair.Base]
+	_, quoteOK := s.supported[pair.Quote]
+
+	return baseOK && quoteOK
+}
+
 func (s *Service) CreateQuoteRequest(
 	ctx context.Context,
-	currency string,
+	pair domain.Pair,
 ) (domain.QuoteRequest, bool, error) {
 	ctx, span := otel.Tracer("quotes.Service").Start(
 		ctx,
 		"CreateQuoteRequest",
-		trace.WithAttributes(attribute.String("currency", currency)),
+		trace.WithAttributes(attribute.String("pair", pair.String())),
 	)
 	defer span.End()
 
-	if _, ok := s.supported[currency]; !ok {
-		return domain.QuoteRequest{}, false, tracing.AddErrorToSpan(span, domain.ErrCurrencyNotSupported)
+	if !s.pairSupported(pair) {
+		return domain.QuoteRequest{}, false, tracing.AddErrorToSpan(span, domain.ErrPairNotSupported)
 	}
 
 	var (
@@ -88,7 +95,7 @@ func (s *Service) CreateQuoteRequest(
 	)
 
 	innerErr = s.txManager.Do(ctx, func(ctx context.Context) error {
-		request, created, innerErr = s.createInsideTx(ctx, currency)
+		request, created, innerErr = s.createInsideTx(ctx, pair)
 		return innerErr
 	})
 
@@ -102,8 +109,8 @@ func (s *Service) CreateQuoteRequest(
 	return request, created, nil
 }
 
-func (s *Service) createInsideTx(ctx context.Context, currency string) (domain.QuoteRequest, bool, error) {
-	pending, err := s.storage.GetActiveRequest(ctx, currency)
+func (s *Service) createInsideTx(ctx context.Context, pair domain.Pair) (domain.QuoteRequest, bool, error) {
+	pending, err := s.storage.GetActiveRequest(ctx, pair)
 	if err != nil && !errors.Is(err, domain.ErrQuoteNotFound) {
 		return domain.QuoteRequest{}, false, fmt.Errorf("get active request: %w", err)
 	}
@@ -114,7 +121,7 @@ func (s *Service) createInsideTx(ctx context.Context, currency string) (domain.Q
 
 	request := domain.QuoteRequest{
 		ID:        uuid.NewV7(),
-		Currency:  currency,
+		Pair:      pair,
 		Status:    domain.RequestStatusPending,
 		CreatedAt: time.Now().UTC(),
 	}
@@ -152,19 +159,19 @@ func (s *Service) GetQuote(ctx context.Context, requestID uuid.UUID) (domain.Quo
 	return quote, nil
 }
 
-func (s *Service) GetLastQuote(ctx context.Context, currency string) (domain.Quote, error) {
+func (s *Service) GetLastQuote(ctx context.Context, pair domain.Pair) (domain.Quote, error) {
 	ctx, span := otel.Tracer("quotes.Service").Start(
 		ctx,
 		"GetLastQuote",
-		trace.WithAttributes(attribute.String("currency", currency)),
+		trace.WithAttributes(attribute.String("pair", pair.String())),
 	)
 	defer span.End()
 
-	if _, ok := s.supported[currency]; !ok {
-		return domain.Quote{}, tracing.AddErrorToSpan(span, domain.ErrCurrencyNotSupported)
+	if !s.pairSupported(pair) {
+		return domain.Quote{}, tracing.AddErrorToSpan(span, domain.ErrPairNotSupported)
 	}
 
-	quote, err := s.storage.GetLastQuote(ctx, currency)
+	quote, err := s.storage.GetLastQuote(ctx, pair)
 	if err != nil {
 		return domain.Quote{}, tracing.AddErrorToSpan(span, err)
 	}
@@ -189,18 +196,51 @@ func (s *Service) ProcessPending(ctx context.Context, batch int) error {
 		return nil
 	}
 
-	currencies := make([]string, 0, len(requests))
-	for _, request := range requests {
-		currencies = append(currencies, request.Currency)
-	}
+	err = s.processRequests(ctx, requests)
 
-	rates, err := s.exchange.LatestRates(ctx, currencies)
+	span.SetAttributes(attribute.Int("processed", len(requests)))
+
 	if err != nil {
-		return s.releaseAll(ctx, span, requests, err)
+		return tracing.AddErrorToSpan(span, err)
 	}
 
+	span.SetStatus(codes.Ok, "ok")
+
+	return nil
+}
+
+func (s *Service) processRequests(ctx context.Context, requests []domain.QuoteRequest) error {
+	groups := make(map[string][]domain.QuoteRequest, len(requests))
 	for _, request := range requests {
-		price, ok := rates[request.Currency]
+		groups[request.Pair.Base] = append(groups[request.Pair.Base], request)
+	}
+
+	var processingErr error
+
+	for base, group := range groups {
+		if err := s.processGroup(ctx, base, group); err != nil {
+			processingErr = errors.Join(processingErr, err)
+		}
+	}
+
+	return processingErr
+}
+
+func (s *Service) processGroup(ctx context.Context, base string, group []domain.QuoteRequest) error {
+	quotes := make([]string, 0, len(group))
+	for _, request := range group {
+		quotes = append(quotes, request.Pair.Quote)
+	}
+
+	rates, err := s.exchange.LatestRates(ctx, base, quotes)
+	if err != nil {
+		s.releaseGroup(ctx, group)
+
+		return fmt.Errorf("exchange rates for base %s: %w", base, err)
+	}
+
+	for _, request := range group {
+		price, ok := rates[request.Pair.Quote]
 		if !ok {
 			s.markRequest(ctx, request, domain.RequestStatusFailed)
 
@@ -209,7 +249,7 @@ func (s *Service) ProcessPending(ctx context.Context, batch int) error {
 
 		errTx := s.txManager.Do(ctx, func(ctx context.Context) error {
 			if err := s.storage.SaveQuote(ctx, domain.Quote{
-				Currency:  request.Currency,
+				Pair:      request.Pair,
 				Price:     price,
 				RequestID: request.ID,
 				UpdatedAt: time.Now().UTC(),
@@ -232,23 +272,18 @@ func (s *Service) ProcessPending(ctx context.Context, batch int) error {
 
 		s.logger.Info().Ctx(ctx).
 			Str("requestID", request.ID.String()).
-			Str("currency", request.Currency).
+			Str("pair", request.Pair.String()).
 			Float64("price", price).
 			Msg("quote updated")
 	}
 
-	span.SetAttributes(attribute.Int("processed", len(requests)))
-	span.SetStatus(codes.Ok, "ok")
-
 	return nil
 }
 
-func (s *Service) releaseAll(ctx context.Context, span trace.Span, requests []domain.QuoteRequest, cause error) error {
-	for _, request := range requests {
+func (s *Service) releaseGroup(ctx context.Context, group []domain.QuoteRequest) {
+	for _, request := range group {
 		_ = s.storage.MarkProcessed(ctx, request.ID, domain.RequestStatusPending)
 	}
-
-	return tracing.AddErrorToSpan(span, fmt.Errorf("exchange rates unavailable: %w", cause))
 }
 
 func (s *Service) markRequest(ctx context.Context, request domain.QuoteRequest, status domain.RequestStatus) {

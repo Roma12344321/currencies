@@ -21,7 +21,7 @@ definitions:
     type: object
   quotes.QuoteResponse:
     properties:
-      currency:
+      pair:
         type: string
       price:
         type: number
@@ -37,13 +37,13 @@ paths:
   /api/v1/quotes:
     post:
       description: |-
-        Регистрирует асинхронный запрос обновления котировки валюты и возвращает его идентификатор.
-        Повторный вызов с той же валютой при незавершённом запросе возвращает существующий идентификатор.
+        Регистрирует асинхронный запрос обновления котировки валютной пары и возвращает его идентификатор.
+        Повторный вызов с той же парой при незавершённом запросе возвращает существующий идентификатор.
       parameters:
-      - description: Код валюты (EUR, MXN)
-        example: EUR
+      - description: Валютная пара BASE/QUOTE
+        example: EUR/MXN
         in: query
-        name: currency
+        name: pair
         required: true
         type: string
       produces:
@@ -59,7 +59,7 @@ paths:
                   $ref: '#/definitions/quotes.CreateQuoteRequestResponse'
               type: object
         "400":
-          description: Некорректный код валюты
+          description: Некорректная или неподдерживаемая пара
           schema:
             $ref: '#/definitions/common.Response'
         "500":
@@ -111,12 +111,12 @@ paths:
   /api/v1/quotes/last:
     get:
       description: Возвращает последнее сохранённое значение цены и время обновления
-        по коду валюты
+        по валютной паре
       parameters:
-      - description: Код валюты (EUR, MXN)
-        example: EUR
+      - description: Валютная пара BASE/QUOTE
+        example: EUR/MXN
         in: query
-        name: currency
+        name: pair
         required: true
         type: string
       produces:
@@ -132,7 +132,7 @@ paths:
                   $ref: '#/definitions/quotes.QuoteResponse'
               type: object
         "400":
-          description: Некорректный код валюты
+          description: Некорректная или неподдерживаемая пара
           schema:
             $ref: '#/definitions/common.Response'
         "404":

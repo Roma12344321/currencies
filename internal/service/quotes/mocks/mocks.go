@@ -42,18 +42,18 @@ func (m *MockExchangeClient) EXPECT() *MockExchangeClientMockRecorder {
 }
 
 // LatestRates mocks base method.
-func (m *MockExchangeClient) LatestRates(ctx context.Context, currencies []string) (map[string]float64, error) {
+func (m *MockExchangeClient) LatestRates(ctx context.Context, base string, quotes []string) (map[string]float64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LatestRates", ctx, currencies)
+	ret := m.ctrl.Call(m, "LatestRates", ctx, base, quotes)
 	ret0, _ := ret[0].(map[string]float64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LatestRates indicates an expected call of LatestRates.
-func (mr *MockExchangeClientMockRecorder) LatestRates(ctx, currencies any) *gomock.Call {
+func (mr *MockExchangeClientMockRecorder) LatestRates(ctx, base, quotes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LatestRates", reflect.TypeOf((*MockExchangeClient)(nil).LatestRates), ctx, currencies)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LatestRates", reflect.TypeOf((*MockExchangeClient)(nil).LatestRates), ctx, base, quotes)
 }
 
 // MockStorage is a mock of Storage interface.
@@ -109,33 +109,33 @@ func (mr *MockStorageMockRecorder) CreateQuoteRequest(ctx, request any) *gomock.
 }
 
 // GetActiveRequest mocks base method.
-func (m *MockStorage) GetActiveRequest(ctx context.Context, currency string) (domain.QuoteRequest, error) {
+func (m *MockStorage) GetActiveRequest(ctx context.Context, pair domain.Pair) (domain.QuoteRequest, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActiveRequest", ctx, currency)
+	ret := m.ctrl.Call(m, "GetActiveRequest", ctx, pair)
 	ret0, _ := ret[0].(domain.QuoteRequest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetActiveRequest indicates an expected call of GetActiveRequest.
-func (mr *MockStorageMockRecorder) GetActiveRequest(ctx, currency any) *gomock.Call {
+func (mr *MockStorageMockRecorder) GetActiveRequest(ctx, pair any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveRequest", reflect.TypeOf((*MockStorage)(nil).GetActiveRequest), ctx, currency)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveRequest", reflect.TypeOf((*MockStorage)(nil).GetActiveRequest), ctx, pair)
 }
 
 // GetLastQuote mocks base method.
-func (m *MockStorage) GetLastQuote(ctx context.Context, currency string) (domain.Quote, error) {
+func (m *MockStorage) GetLastQuote(ctx context.Context, pair domain.Pair) (domain.Quote, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLastQuote", ctx, currency)
+	ret := m.ctrl.Call(m, "GetLastQuote", ctx, pair)
 	ret0, _ := ret[0].(domain.Quote)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLastQuote indicates an expected call of GetLastQuote.
-func (mr *MockStorageMockRecorder) GetLastQuote(ctx, currency any) *gomock.Call {
+func (mr *MockStorageMockRecorder) GetLastQuote(ctx, pair any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastQuote", reflect.TypeOf((*MockStorage)(nil).GetLastQuote), ctx, currency)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastQuote", reflect.TypeOf((*MockStorage)(nil).GetLastQuote), ctx, pair)
 }
 
 // GetQuoteByRequestID mocks base method.

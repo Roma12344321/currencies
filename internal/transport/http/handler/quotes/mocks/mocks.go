@@ -42,9 +42,9 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateQuoteRequest mocks base method.
-func (m *MockService) CreateQuoteRequest(ctx context.Context, currency string) (domain.QuoteRequest, bool, error) {
+func (m *MockService) CreateQuoteRequest(ctx context.Context, pair domain.Pair) (domain.QuoteRequest, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateQuoteRequest", ctx, currency)
+	ret := m.ctrl.Call(m, "CreateQuoteRequest", ctx, pair)
 	ret0, _ := ret[0].(domain.QuoteRequest)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -52,24 +52,24 @@ func (m *MockService) CreateQuoteRequest(ctx context.Context, currency string) (
 }
 
 // CreateQuoteRequest indicates an expected call of CreateQuoteRequest.
-func (mr *MockServiceMockRecorder) CreateQuoteRequest(ctx, currency any) *gomock.Call {
+func (mr *MockServiceMockRecorder) CreateQuoteRequest(ctx, pair any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQuoteRequest", reflect.TypeOf((*MockService)(nil).CreateQuoteRequest), ctx, currency)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQuoteRequest", reflect.TypeOf((*MockService)(nil).CreateQuoteRequest), ctx, pair)
 }
 
 // GetLastQuote mocks base method.
-func (m *MockService) GetLastQuote(ctx context.Context, currency string) (domain.Quote, error) {
+func (m *MockService) GetLastQuote(ctx context.Context, pair domain.Pair) (domain.Quote, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLastQuote", ctx, currency)
+	ret := m.ctrl.Call(m, "GetLastQuote", ctx, pair)
 	ret0, _ := ret[0].(domain.Quote)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLastQuote indicates an expected call of GetLastQuote.
-func (mr *MockServiceMockRecorder) GetLastQuote(ctx, currency any) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetLastQuote(ctx, pair any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastQuote", reflect.TypeOf((*MockService)(nil).GetLastQuote), ctx, currency)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastQuote", reflect.TypeOf((*MockService)(nil).GetLastQuote), ctx, pair)
 }
 
 // GetQuote mocks base method.

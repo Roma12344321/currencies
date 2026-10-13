@@ -56,7 +56,7 @@ func main() {
 	txManager := txmanager.New(connMng)
 	quotesSt := quotesStorage.New(connMng)
 
-	exchangeClient := exchange.New(cfg.Exchange.BaseURL, cfg.Exchange.BaseCurrency, cfg.Exchange.Timeout)
+	exchangeClient := exchange.New(cfg.Exchange.BaseURL, cfg.Exchange.Timeout)
 	quotesSvc := quotesService.New(logger, quotesSt, exchangeClient, txManager, cfg.Exchange.SupportedList)
 
 	quotesWorker := worker.New(logger, quotesSvc, cfg.Worker.Interval, cfg.Worker.Batch)

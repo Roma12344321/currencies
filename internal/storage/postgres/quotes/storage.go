@@ -38,17 +38,17 @@ func (s *Storage) CreateQuoteRequest(ctx context.Context, request domain.QuoteRe
 		"CreateQuoteRequest",
 		trace.WithAttributes(
 			attribute.Stringer("requestID", request.ID),
-			attribute.String("currency", request.Currency),
+			attribute.String("pair", request.Pair.String()),
 		),
 	)
 	defer span.End()
 
 	const query = `
-		INSERT INTO quote_requests(id, currency, status, created_at, updated_at)
+		INSERT INTO quote_requests(id, pair, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5)`
 
 	_, err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
-		Exec(ctx, query, request.ID, request.Currency, request.Status, request.CreatedAt, request.CreatedAt)
+		Exec(ctx, query, request.ID, request.Pair.String(), request.Status, request.CreatedAt, request.CreatedAt)
 	if err != nil {
 		return tracing.AddErrorToSpan(span, fmt.Errorf("storage.CreateQuoteRequest: %w", err))
 	}
@@ -67,13 +67,15 @@ func (s *Storage) GetQuoteRequest(ctx context.Context, requestID uuid.UUID) (dom
 	var request domain.QuoteRequest
 
 	const query = `
-		SELECT id, currency, status, created_at
+		SELECT id, pair, status, created_at
 		FROM quote_requests
 		WHERE id = $1`
 
+	var pair string
+
 	err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
 		QueryRow(ctx, query, requestID).
-		Scan(&request.ID, &request.Currency, &request.Status, &request.CreatedAt)
+		Scan(&request.ID, &pair, &request.Status, &request.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.QuoteRequest{}, domain.ErrQuoteNotFound
@@ -82,34 +84,46 @@ func (s *Storage) GetQuoteRequest(ctx context.Context, requestID uuid.UUID) (dom
 		return domain.QuoteRequest{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetQuoteRequest: %w", err))
 	}
 
+	request.Pair, err = domain.ParsePair(pair)
+	if err != nil {
+		return domain.QuoteRequest{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetQuoteRequest: %w", err))
+	}
+
 	return request, nil
 }
 
-func (s *Storage) GetActiveRequest(ctx context.Context, currency string) (domain.QuoteRequest, error) {
+func (s *Storage) GetActiveRequest(ctx context.Context, pair domain.Pair) (domain.QuoteRequest, error) {
 	ctx, span := otel.Tracer("quotes.Storage").Start(
 		ctx,
 		"GetActiveRequest",
-		trace.WithAttributes(attribute.String("currency", currency)),
+		trace.WithAttributes(attribute.String("pair", pair.String())),
 	)
 	defer span.End()
 
 	var request domain.QuoteRequest
 
 	const query = `
-		SELECT id, currency, status, created_at
+		SELECT id, pair, status, created_at
 		FROM quote_requests
-		WHERE currency = $1 AND status IN ('pending', 'processing')
+		WHERE pair = $1 AND status IN ('pending', 'processing')
 		ORDER BY created_at
 		LIMIT 1`
 
+	var rawPair string
+
 	err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
-		QueryRow(ctx, query, currency).
-		Scan(&request.ID, &request.Currency, &request.Status, &request.CreatedAt)
+		QueryRow(ctx, query, pair.String()).
+		Scan(&request.ID, &rawPair, &request.Status, &request.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.QuoteRequest{}, domain.ErrQuoteNotFound
 		}
 
+		return domain.QuoteRequest{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetActiveRequest: %w", err))
+	}
+
+	request.Pair, err = domain.ParsePair(rawPair)
+	if err != nil {
 		return domain.QuoteRequest{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetActiveRequest: %w", err))
 	}
 
@@ -127,18 +141,25 @@ func (s *Storage) GetQuoteByRequestID(ctx context.Context, requestID uuid.UUID) 
 	var quote domain.Quote
 
 	const query = `
-		SELECT currency, price, request_id, updated_at
+		SELECT pair, price, request_id, updated_at
 		FROM quotes
 		WHERE request_id = $1`
 
+	var rawPair string
+
 	err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
 		QueryRow(ctx, query, requestID).
-		Scan(&quote.Currency, &quote.Price, &quote.RequestID, &quote.UpdatedAt)
+		Scan(&rawPair, &quote.Price, &quote.RequestID, &quote.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Quote{}, domain.ErrQuoteNotFound
 		}
 
+		return domain.Quote{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetQuoteByRequestID: %w", err))
+	}
+
+	quote.Pair, err = domain.ParsePair(rawPair)
+	if err != nil {
 		return domain.Quote{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetQuoteByRequestID: %w", err))
 	}
 
@@ -175,20 +196,20 @@ func (s *Storage) SaveQuote(ctx context.Context, quote domain.Quote) error {
 		ctx,
 		"SaveQuote",
 		trace.WithAttributes(
-			attribute.String("currency", quote.Currency),
+			attribute.String("pair", quote.Pair.String()),
 			attribute.Float64("price", quote.Price),
 		),
 	)
 	defer span.End()
 
 	const query = `
-		INSERT INTO quotes(currency, price, request_id, updated_at)
+		INSERT INTO quotes(pair, price, request_id, updated_at)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (currency) DO UPDATE
+		ON CONFLICT (pair) DO UPDATE
 		SET price = EXCLUDED.price, request_id = EXCLUDED.request_id, updated_at = EXCLUDED.updated_at`
 
 	_, err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
-		Exec(ctx, query, quote.Currency, quote.Price, quote.RequestID, quote.UpdatedAt)
+		Exec(ctx, query, quote.Pair.String(), quote.Price, quote.RequestID, quote.UpdatedAt)
 	if err != nil {
 		return tracing.AddErrorToSpan(span, fmt.Errorf("storage.SaveQuote: %w", err))
 	}
@@ -196,29 +217,36 @@ func (s *Storage) SaveQuote(ctx context.Context, quote domain.Quote) error {
 	return nil
 }
 
-func (s *Storage) GetLastQuote(ctx context.Context, currency string) (domain.Quote, error) {
+func (s *Storage) GetLastQuote(ctx context.Context, pair domain.Pair) (domain.Quote, error) {
 	ctx, span := otel.Tracer("quotes.Storage").Start(
 		ctx,
 		"GetLastQuote",
-		trace.WithAttributes(attribute.String("currency", currency)),
+		trace.WithAttributes(attribute.String("pair", pair.String())),
 	)
 	defer span.End()
 
 	var quote domain.Quote
 
 	const query = `
-		SELECT currency, price, request_id, updated_at
+		SELECT pair, price, request_id, updated_at
 		FROM quotes
-		WHERE currency = $1`
+		WHERE pair = $1`
+
+	var rawPair string
 
 	err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
-		QueryRow(ctx, query, currency).
-		Scan(&quote.Currency, &quote.Price, &quote.RequestID, &quote.UpdatedAt)
+		QueryRow(ctx, query, pair.String()).
+		Scan(&rawPair, &quote.Price, &quote.RequestID, &quote.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Quote{}, domain.ErrQuoteNotFound
 		}
 
+		return domain.Quote{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetLastQuote: %w", err))
+	}
+
+	quote.Pair, err = domain.ParsePair(rawPair)
+	if err != nil {
 		return domain.Quote{}, tracing.AddErrorToSpan(span, fmt.Errorf("storage.GetLastQuote: %w", err))
 	}
 
@@ -244,7 +272,7 @@ func (s *Storage) ClaimPendingRequests(ctx context.Context, limit int) ([]domain
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED
 		)
-		RETURNING id, currency, status, created_at`
+		RETURNING id, pair, status, created_at`
 
 	rows, err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
 		Query(ctx, query, limit, time.Now().UTC(), time.Now().UTC().Add(-staleProcessingAge))
@@ -256,8 +284,16 @@ func (s *Storage) ClaimPendingRequests(ctx context.Context, limit int) ([]domain
 	requests := make([]domain.QuoteRequest, 0, limit)
 
 	for rows.Next() {
-		var request domain.QuoteRequest
-		if err = rows.Scan(&request.ID, &request.Currency, &request.Status, &request.CreatedAt); err != nil {
+		var (
+			request domain.QuoteRequest
+			rawPair string
+		)
+
+		if err = rows.Scan(&request.ID, &rawPair, &request.Status, &request.CreatedAt); err != nil {
+			return nil, tracing.AddErrorToSpan(span, fmt.Errorf("scan pending request: %w", err))
+		}
+
+		if request.Pair, err = domain.ParsePair(rawPair); err != nil {
 			return nil, tracing.AddErrorToSpan(span, fmt.Errorf("scan pending request: %w", err))
 		}
 

@@ -49,22 +49,22 @@ func (s *ServiceTest) SetupTest() {
 func (s *ServiceTest) Test_CreateQuoteRequest() {
 	tt := []struct {
 		name       string
-		currency   string
+		pair       domain.Pair
 		mocksInit  func()
 		expCreated bool
 		expErr     error
 	}{
 		{
-			name:     "new request",
-			currency: "EUR",
+			name: "new request",
+			pair: domain.Pair{Base: "EUR", Quote: "MXN"},
 			mocksInit: func() {
 				s.storage.EXPECT().
-					GetActiveRequest(gomock.Any(), "EUR").
+					GetActiveRequest(gomock.Any(), domain.Pair{Base: "EUR", Quote: "MXN"}).
 					Return(domain.QuoteRequest{}, domain.ErrQuoteNotFound)
 				s.storage.EXPECT().
 					CreateQuoteRequest(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(_ context.Context, r domain.QuoteRequest) error {
-						s.Require().Equal("EUR", r.Currency)
+						s.Require().Equal(domain.Pair{Base: "EUR", Quote: "MXN"}, r.Pair)
 						s.Require().Equal(domain.RequestStatusPending, r.Status)
 						return nil
 					})
@@ -72,31 +72,37 @@ func (s *ServiceTest) Test_CreateQuoteRequest() {
 			expCreated: true,
 		},
 		{
-			name:     "idempotent",
-			currency: "EUR",
+			name: "idempotent",
+			pair: domain.Pair{Base: "EUR", Quote: "MXN"},
 			mocksInit: func() {
 				s.storage.EXPECT().
-					GetActiveRequest(gomock.Any(), "EUR").
+					GetActiveRequest(gomock.Any(), domain.Pair{Base: "EUR", Quote: "MXN"}).
 					Return(domain.QuoteRequest{
-						ID:       uuid.NewV7(),
-						Currency: "EUR",
-						Status:   domain.RequestStatusPending,
+						ID:     uuid.NewV7(),
+						Pair:   domain.Pair{Base: "EUR", Quote: "MXN"},
+						Status: domain.RequestStatusPending,
 					}, nil)
 			},
 			expCreated: false,
 		},
 		{
-			name:      "unsupported currency",
-			currency:  "JPY",
+			name:      "base not supported",
+			pair:      domain.Pair{Base: "JPY", Quote: "EUR"},
 			mocksInit: func() {},
-			expErr:    domain.ErrCurrencyNotSupported,
+			expErr:    domain.ErrPairNotSupported,
 		},
 		{
-			name:     "storage error",
-			currency: "EUR",
+			name:      "quote not supported",
+			pair:      domain.Pair{Base: "EUR", Quote: "JPY"},
+			mocksInit: func() {},
+			expErr:    domain.ErrPairNotSupported,
+		},
+		{
+			name: "storage error",
+			pair: domain.Pair{Base: "EUR", Quote: "MXN"},
 			mocksInit: func() {
 				s.storage.EXPECT().
-					GetActiveRequest(gomock.Any(), "EUR").
+					GetActiveRequest(gomock.Any(), domain.Pair{Base: "EUR", Quote: "MXN"}).
 					Return(domain.QuoteRequest{}, errors.New("db down"))
 			},
 			expErr: errors.New("db down"),
@@ -107,7 +113,7 @@ func (s *ServiceTest) Test_CreateQuoteRequest() {
 		s.Run(tc.name, func() {
 			tc.mocksInit()
 
-			request, created, err := s.service.CreateQuoteRequest(context.Background(), tc.currency)
+			request, created, err := s.service.CreateQuoteRequest(context.Background(), tc.pair)
 
 			if tc.expErr != nil {
 				s.ErrorContains(err, tc.expErr.Error())
@@ -117,7 +123,7 @@ func (s *ServiceTest) Test_CreateQuoteRequest() {
 			}
 
 			s.NoError(err)
-			s.Require().Equal(tc.currency, request.Currency)
+			s.Require().Equal(tc.pair, request.Pair)
 			s.Equal(tc.expCreated, created)
 			s.NotEmpty(request.ID)
 		})
@@ -140,7 +146,7 @@ func (s *ServiceTest) Test_GetQuote() {
 					Return(domain.QuoteRequest{Status: domain.RequestStatusDone}, nil)
 				s.storage.EXPECT().
 					GetQuoteByRequestID(gomock.Any(), requestID).
-					Return(domain.Quote{Currency: "EUR", Price: 0.9}, nil)
+					Return(domain.Quote{Pair: domain.Pair{Base: "EUR", Quote: "MXN"}, Price: 18.5}, nil)
 			},
 		},
 		{
@@ -178,7 +184,7 @@ func (s *ServiceTest) Test_GetQuote() {
 			}
 
 			s.NoError(err)
-			s.InDelta(0.9, quote.Price, 0.0001)
+			s.InDelta(18.5, quote.Price, 0.0001)
 		})
 	}
 }
@@ -186,31 +192,35 @@ func (s *ServiceTest) Test_GetQuote() {
 func (s *ServiceTest) Test_GetLastQuote() {
 	tt := []struct {
 		name      string
-		currency  string
+		pair      domain.Pair
 		mocksInit func()
 		expErr    error
 	}{
 		{
-			name:     "found",
-			currency: "MXN",
+			name: "found",
+			pair: domain.Pair{Base: "EUR", Quote: "MXN"},
 			mocksInit: func() {
 				s.storage.EXPECT().
-					GetLastQuote(gomock.Any(), "MXN").
-					Return(domain.Quote{Currency: "MXN", Price: 18.5, UpdatedAt: time.Now()}, nil)
+					GetLastQuote(gomock.Any(), domain.Pair{Base: "EUR", Quote: "MXN"}).
+					Return(domain.Quote{
+						Pair:      domain.Pair{Base: "EUR", Quote: "MXN"},
+						Price:     18.5,
+						UpdatedAt: time.Now(),
+					}, nil)
 			},
 		},
 		{
-			name:      "unsupported",
-			currency:  "GBP",
+			name:      "not supported",
+			pair:      domain.Pair{Base: "MXN", Quote: "JPY"},
 			mocksInit: func() {},
-			expErr:    domain.ErrCurrencyNotSupported,
+			expErr:    domain.ErrPairNotSupported,
 		},
 		{
-			name:     "not found",
-			currency: "EUR",
+			name: "not found",
+			pair: domain.Pair{Base: "EUR", Quote: "MXN"},
 			mocksInit: func() {
 				s.storage.EXPECT().
-					GetLastQuote(gomock.Any(), "EUR").
+					GetLastQuote(gomock.Any(), domain.Pair{Base: "EUR", Quote: "MXN"}).
 					Return(domain.Quote{}, domain.ErrQuoteNotFound)
 			},
 			expErr: domain.ErrQuoteNotFound,
@@ -221,7 +231,7 @@ func (s *ServiceTest) Test_GetLastQuote() {
 		s.Run(tc.name, func() {
 			tc.mocksInit()
 
-			quote, err := s.service.GetLastQuote(context.Background(), tc.currency)
+			quote, err := s.service.GetLastQuote(context.Background(), tc.pair)
 
 			if tc.expErr != nil {
 				s.ErrorIs(err, tc.expErr)
@@ -229,37 +239,41 @@ func (s *ServiceTest) Test_GetLastQuote() {
 			}
 
 			s.NoError(err)
-			s.Equal(tc.currency, quote.Currency)
+			s.Equal(tc.pair, quote.Pair)
 		})
 	}
 }
 
 func (s *ServiceTest) Test_ProcessPending() {
-	requests := []domain.QuoteRequest{
-		{ID: uuid.NewV7(), Currency: "EUR"},
-		{ID: uuid.NewV7(), Currency: "MXN"},
-	}
+	eurMxn := domain.QuoteRequest{ID: uuid.NewV7(), Pair: domain.Pair{Base: "EUR", Quote: "MXN"}}
+	mxnEur := domain.QuoteRequest{ID: uuid.NewV7(), Pair: domain.Pair{Base: "MXN", Quote: "EUR"}}
 
 	tt := []struct {
 		name      string
+		requests  []domain.QuoteRequest
 		mocksInit func()
 		expErr    bool
 	}{
 		{
-			name: "saves quotes and marks done",
+			name:     "groups by base and saves quotes",
+			requests: []domain.QuoteRequest{eurMxn, mxnEur},
 			mocksInit: func() {
 				s.storage.EXPECT().
 					ClaimPendingRequests(gomock.Any(), 100).
-					Return(requests, nil)
-				s.exchange.EXPECT().
-					LatestRates(gomock.Any(), []string{"EUR", "MXN"}).
-					Return(map[string]float64{"EUR": 0.9, "MXN": 18.5}, nil)
+					Return([]domain.QuoteRequest{eurMxn, mxnEur}, nil)
 
-				for _, request := range requests {
+				s.exchange.EXPECT().
+					LatestRates(gomock.Any(), "EUR", []string{"MXN"}).
+					Return(map[string]float64{"MXN": 18.5}, nil)
+				s.exchange.EXPECT().
+					LatestRates(gomock.Any(), "MXN", []string{"EUR"}).
+					Return(map[string]float64{"EUR": 0.054}, nil)
+
+				for _, request := range []domain.QuoteRequest{eurMxn, mxnEur} {
 					s.storage.EXPECT().
 						SaveQuote(gomock.Any(), gomock.Any()).
 						Do(func(_ context.Context, q domain.Quote) {
-							s.Require().Equal(request.Currency, q.Currency)
+							s.Require().Equal(request.Pair, q.Pair)
 							s.Require().Equal(request.ID, q.RequestID)
 						}).
 						Return(nil)
@@ -269,18 +283,30 @@ func (s *ServiceTest) Test_ProcessPending() {
 			},
 		},
 		{
-			name: "exchange unavailable releases to pending",
+			name:     "failed base releases only its group",
+			requests: []domain.QuoteRequest{eurMxn, mxnEur},
 			mocksInit: func() {
 				s.storage.EXPECT().
 					ClaimPendingRequests(gomock.Any(), 100).
-					Return(requests, nil)
+					Return([]domain.QuoteRequest{eurMxn, mxnEur}, nil)
+
 				s.exchange.EXPECT().
-					LatestRates(gomock.Any(), gomock.Any()).
+					LatestRates(gomock.Any(), "EUR", []string{"MXN"}).
 					Return(nil, errors.New("connection refused"))
-				for _, request := range requests {
-					s.storage.EXPECT().
-						MarkProcessed(gomock.Any(), request.ID, domain.RequestStatusPending)
-				}
+				s.exchange.EXPECT().
+					LatestRates(gomock.Any(), "MXN", []string{"EUR"}).
+					Return(map[string]float64{"EUR": 0.054}, nil)
+
+				s.storage.EXPECT().
+					MarkProcessed(gomock.Any(), eurMxn.ID, domain.RequestStatusPending)
+				s.storage.EXPECT().
+					SaveQuote(gomock.Any(), gomock.Any()).
+					Do(func(_ context.Context, q domain.Quote) {
+						s.Require().Equal(mxnEur.Pair, q.Pair)
+					}).
+					Return(nil)
+				s.storage.EXPECT().
+					MarkProcessed(gomock.Any(), mxnEur.ID, domain.RequestStatusDone)
 			},
 			expErr: true,
 		},
