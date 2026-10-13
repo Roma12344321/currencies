@@ -1,3 +1,4 @@
+//go:generate mockgen -source=./worker.go -destination=./mocks/mocks.go -package=mocks
 package worker
 
 import (

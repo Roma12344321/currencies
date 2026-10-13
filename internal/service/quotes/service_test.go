@@ -8,255 +8,304 @@ import (
 	"uuid"
 
 	"github.com/Roma12344321/currencies/internal/domain"
+	"github.com/Roma12344321/currencies/internal/service/quotes/mocks"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 )
 
-type storageMock struct {
-	getActive  func(ctx context.Context, currency string) (domain.QuoteRequest, error)
-	createReq  func(ctx context.Context, request domain.QuoteRequest) error
-	getByReqID func(ctx context.Context, requestID uuid.UUID) (domain.Quote, error)
-	lastQuote  func(ctx context.Context, currency string) (domain.Quote, error)
-	claim      func(ctx context.Context, limit int) ([]domain.QuoteRequest, error)
-	mark       func(ctx context.Context, requestID uuid.UUID, status domain.RequestStatus) error
-	save       func(ctx context.Context, quote domain.Quote) error
+type ServiceTest struct {
+	suite.Suite
+
+	ctrl     *gomock.Controller
+	storage  *mocks.MockStorage
+	exchange *mocks.MockExchangeClient
+	tx       *mocks.MockTxManager
+
+	service *Service
 }
 
-func (m *storageMock) CreateQuoteRequest(ctx context.Context, r domain.QuoteRequest) error {
-	if m.createReq != nil {
-		return m.createReq(ctx, r)
-	}
-
-	return nil
-}
-
-func (m *storageMock) GetQuoteRequest(_ context.Context, _ uuid.UUID) (domain.QuoteRequest, error) {
-	return domain.QuoteRequest{}, nil
-}
-
-func (m *storageMock) GetActiveRequest(ctx context.Context, curr string) (domain.QuoteRequest, error) {
-	return m.getActive(ctx, curr)
-}
-
-func (m *storageMock) GetQuoteByRequestID(ctx context.Context, id uuid.UUID) (domain.Quote, error) {
-	return m.getByReqID(ctx, id)
-}
-
-func (m *storageMock) MarkProcessed(ctx context.Context, id uuid.UUID, st domain.RequestStatus) error {
-	if m.mark != nil {
-		return m.mark(ctx, id, st)
-	}
-
-	return nil
-}
-
-func (m *storageMock) SaveQuote(ctx context.Context, q domain.Quote) error {
-	if m.save != nil {
-		return m.save(ctx, q)
-	}
-
-	return nil
-}
-
-func (m *storageMock) GetLastQuote(ctx context.Context, curr string) (domain.Quote, error) {
-	return m.lastQuote(ctx, curr)
-}
-
-func (m *storageMock) ClaimPendingRequests(ctx context.Context, limit int) ([]domain.QuoteRequest, error) {
-	return m.claim(ctx, limit)
-}
-
-type exchangeMock struct {
-	rates func(ctx context.Context, currencies []string) (map[string]float64, error)
-}
-
-func (m *exchangeMock) LatestRates(ctx context.Context, curr []string) (map[string]float64, error) {
-	return m.rates(ctx, curr)
-}
-
-type txManagerMock struct{}
-
-func (txManagerMock) Do(ctx context.Context, process func(ctx context.Context) error) error {
-	return process(ctx)
-}
-
-var supported = []string{"EUR", "MXN"}
-
-func newService(st storageIface, ex exchangeIface) *Service {
-	return New(zerolog.Nop(), st, ex, txManagerMock{}, supported)
-}
-
-type (
-	storageIface  = Storage
-	exchangeIface = ExchangeClient
-)
-
-func TestCreateQuoteRequestNew(t *testing.T) {
+func TestInit(t *testing.T) {
 	t.Parallel()
+	suite.Run(t, new(ServiceTest))
+}
 
-	st := &storageMock{
-		getActive: func(_ context.Context, _ string) (domain.QuoteRequest, error) {
-			return domain.QuoteRequest{}, domain.ErrQuoteNotFound
+func (s *ServiceTest) SetupTest() {
+	s.ctrl = gomock.NewController(s.T())
+	s.storage = mocks.NewMockStorage(s.ctrl)
+	s.exchange = mocks.NewMockExchangeClient(s.ctrl)
+	s.tx = mocks.NewMockTxManager(s.ctrl)
+
+	s.tx.EXPECT().
+		Do(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, process func(ctx context.Context) error) error {
+			return process(ctx)
+		}).
+		AnyTimes()
+
+	s.service = New(zerolog.Nop(), s.storage, s.exchange, s.tx, []string{"EUR", "MXN"})
+}
+
+func (s *ServiceTest) Test_CreateQuoteRequest() {
+	tt := []struct {
+		name       string
+		currency   string
+		mocksInit  func()
+		expCreated bool
+		expErr     error
+	}{
+		{
+			name:     "new request",
+			currency: "EUR",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetActiveRequest(gomock.Any(), "EUR").
+					Return(domain.QuoteRequest{}, domain.ErrQuoteNotFound)
+				s.storage.EXPECT().
+					CreateQuoteRequest(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, r domain.QuoteRequest) error {
+						s.Require().Equal("EUR", r.Currency)
+						s.Require().Equal(domain.RequestStatusPending, r.Status)
+						return nil
+					})
+			},
+			expCreated: true,
+		},
+		{
+			name:     "idempotent",
+			currency: "EUR",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetActiveRequest(gomock.Any(), "EUR").
+					Return(domain.QuoteRequest{
+						ID:       uuid.NewV7(),
+						Currency: "EUR",
+						Status:   domain.RequestStatusPending,
+					}, nil)
+			},
+			expCreated: false,
+		},
+		{
+			name:      "unsupported currency",
+			currency:  "JPY",
+			mocksInit: func() {},
+			expErr:    domain.ErrCurrencyNotSupported,
+		},
+		{
+			name:     "storage error",
+			currency: "EUR",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetActiveRequest(gomock.Any(), "EUR").
+					Return(domain.QuoteRequest{}, errors.New("db down"))
+			},
+			expErr: errors.New("db down"),
 		},
 	}
-	svc := newService(st, &exchangeMock{})
 
-	request, created, err := svc.CreateQuoteRequest(context.Background(), "EUR")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	for _, tc := range tt {
+		s.Run(tc.name, func() {
+			tc.mocksInit()
 
-	if !created {
-		t.Fatal("expected created=true for fresh currency")
-	}
+			request, created, err := s.service.CreateQuoteRequest(context.Background(), tc.currency)
 
-	if request.Currency != "EUR" || request.Status != domain.RequestStatusPending {
-		t.Fatalf("unexpected request: %+v", request)
-	}
-}
+			if tc.expErr != nil {
+				s.ErrorContains(err, tc.expErr.Error())
+				s.False(created)
 
-func TestCreateQuoteRequestIdempotent(t *testing.T) {
-	t.Parallel()
-
-	existing := domain.QuoteRequest{ID: uuid.NewV7(), Currency: "EUR", Status: domain.RequestStatusPending}
-	st := &storageMock{
-		getActive: func(_ context.Context, currency string) (domain.QuoteRequest, error) {
-			if currency != "EUR" {
-				t.Errorf("unexpected currency: %s", currency)
+				return
 			}
 
-			return existing, nil
-		},
-	}
-	svc := newService(st, &exchangeMock{})
-
-	request, created, err := svc.CreateQuoteRequest(context.Background(), "EUR")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if created {
-		t.Fatal("expected created=false for existing pending request")
-	}
-
-	if request.ID != existing.ID {
-		t.Fatalf("expected existing request %s, got %s", existing.ID, request.ID)
+			s.NoError(err)
+			s.Require().Equal(tc.currency, request.Currency)
+			s.Equal(tc.expCreated, created)
+			s.NotEmpty(request.ID)
+		})
 	}
 }
 
-func TestCreateQuoteRequestUnsupported(t *testing.T) {
-	t.Parallel()
-
-	svc := newService(&storageMock{}, &exchangeMock{})
-
-	_, _, err := svc.CreateQuoteRequest(context.Background(), "JPY")
-	if !errors.Is(err, domain.ErrCurrencyNotSupported) {
-		t.Fatalf("expected ErrCurrencyNotSupported, got %v", err)
-	}
-}
-
-func TestGetQuoteNotReady(t *testing.T) {
-	t.Parallel()
-
+func (s *ServiceTest) Test_GetQuote() {
 	requestID := uuid.NewV7()
-	st := &storageMock{
-		getByReqID: func(_ context.Context, _ uuid.UUID) (domain.Quote, error) {
-			return domain.Quote{}, domain.ErrQuoteNotFound
+
+	tt := []struct {
+		name      string
+		mocksInit func()
+		expErr    error
+	}{
+		{
+			name: "ready",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetQuoteRequest(gomock.Any(), requestID).
+					Return(domain.QuoteRequest{Status: domain.RequestStatusDone}, nil)
+				s.storage.EXPECT().
+					GetQuoteByRequestID(gomock.Any(), requestID).
+					Return(domain.Quote{Currency: "EUR", Price: 0.9}, nil)
+			},
+		},
+		{
+			name: "not ready",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetQuoteRequest(gomock.Any(), requestID).
+					Return(domain.QuoteRequest{Status: domain.RequestStatusPending}, nil)
+				s.storage.EXPECT().
+					GetQuoteByRequestID(gomock.Any(), requestID).
+					Return(domain.Quote{}, domain.ErrQuoteNotFound)
+			},
+			expErr: domain.ErrQuoteNotReady,
+		},
+		{
+			name: "request not found",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetQuoteRequest(gomock.Any(), requestID).
+					Return(domain.QuoteRequest{}, domain.ErrQuoteNotFound)
+			},
+			expErr: domain.ErrQuoteNotFound,
 		},
 	}
-	svc := newService(st, &exchangeMock{})
 
-	_, err := svc.GetQuote(context.Background(), requestID)
-	if !errors.Is(err, domain.ErrQuoteNotReady) {
-		t.Fatalf("expected ErrQuoteNotReady, got %v", err)
+	for _, tc := range tt {
+		s.Run(tc.name, func() {
+			tc.mocksInit()
+
+			quote, err := s.service.GetQuote(context.Background(), requestID)
+
+			if tc.expErr != nil {
+				s.ErrorIs(err, tc.expErr)
+				return
+			}
+
+			s.NoError(err)
+			s.InDelta(0.9, quote.Price, 0.0001)
+		})
 	}
 }
 
-func TestProcessPendingSavesQuote(t *testing.T) {
-	t.Parallel()
-
-	requestID := uuid.NewV7()
-	requests := []domain.QuoteRequest{{ID: requestID, Currency: "EUR", Status: domain.RequestStatusProcessing}}
-
-	var saved domain.Quote
-
-	st := &storageMock{
-		claim: func(_ context.Context, _ int) ([]domain.QuoteRequest, error) {
-			return requests, nil
+func (s *ServiceTest) Test_GetLastQuote() {
+	tt := []struct {
+		name      string
+		currency  string
+		mocksInit func()
+		expErr    error
+	}{
+		{
+			name:     "found",
+			currency: "MXN",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetLastQuote(gomock.Any(), "MXN").
+					Return(domain.Quote{Currency: "MXN", Price: 18.5, UpdatedAt: time.Now()}, nil)
+			},
 		},
-		save: func(_ context.Context, q domain.Quote) error {
-			saved = q
-			return nil
+		{
+			name:      "unsupported",
+			currency:  "GBP",
+			mocksInit: func() {},
+			expErr:    domain.ErrCurrencyNotSupported,
+		},
+		{
+			name:     "not found",
+			currency: "EUR",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					GetLastQuote(gomock.Any(), "EUR").
+					Return(domain.Quote{}, domain.ErrQuoteNotFound)
+			},
+			expErr: domain.ErrQuoteNotFound,
 		},
 	}
-	ex := &exchangeMock{
-		rates: func(_ context.Context, currencies []string) (map[string]float64, error) {
-			return map[string]float64{"EUR": 0.92}, nil
-		},
-	}
-	svc := newService(st, ex)
 
-	if err := svc.ProcessPending(context.Background(), 10); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	for _, tc := range tt {
+		s.Run(tc.name, func() {
+			tc.mocksInit()
 
-	if saved.Currency != "EUR" || saved.Price != 0.92 || saved.RequestID != requestID {
-		t.Fatalf("unexpected saved quote: %+v", saved)
-	}
+			quote, err := s.service.GetLastQuote(context.Background(), tc.currency)
 
-	if saved.UpdatedAt.IsZero() {
-		t.Fatal("expected UpdatedAt to be set")
+			if tc.expErr != nil {
+				s.ErrorIs(err, tc.expErr)
+				return
+			}
+
+			s.NoError(err)
+			s.Equal(tc.currency, quote.Currency)
+		})
 	}
 }
 
-func TestProcessPendingReleasesOnExchangeError(t *testing.T) {
-	t.Parallel()
+func (s *ServiceTest) Test_ProcessPending() {
+	requests := []domain.QuoteRequest{
+		{ID: uuid.NewV7(), Currency: "EUR"},
+		{ID: uuid.NewV7(), Currency: "MXN"},
+	}
 
-	requestID := uuid.NewV7()
-	var markedStatus domain.RequestStatus
+	tt := []struct {
+		name      string
+		mocksInit func()
+		expErr    bool
+	}{
+		{
+			name: "saves quotes and marks done",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					ClaimPendingRequests(gomock.Any(), 100).
+					Return(requests, nil)
+				s.exchange.EXPECT().
+					LatestRates(gomock.Any(), []string{"EUR", "MXN"}).
+					Return(map[string]float64{"EUR": 0.9, "MXN": 18.5}, nil)
 
-	st := &storageMock{
-		claim: func(_ context.Context, _ int) ([]domain.QuoteRequest, error) {
-			return []domain.QuoteRequest{{ID: requestID, Currency: "EUR"}}, nil
+				for _, request := range requests {
+					s.storage.EXPECT().
+						SaveQuote(gomock.Any(), gomock.Any()).
+						Do(func(_ context.Context, q domain.Quote) {
+							s.Require().Equal(request.Currency, q.Currency)
+							s.Require().Equal(request.ID, q.RequestID)
+						}).
+						Return(nil)
+					s.storage.EXPECT().
+						MarkProcessed(gomock.Any(), request.ID, domain.RequestStatusDone)
+				}
+			},
 		},
-		mark: func(_ context.Context, _ uuid.UUID, status domain.RequestStatus) error {
-			markedStatus = status
-			return nil
+		{
+			name: "exchange unavailable releases to pending",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					ClaimPendingRequests(gomock.Any(), 100).
+					Return(requests, nil)
+				s.exchange.EXPECT().
+					LatestRates(gomock.Any(), gomock.Any()).
+					Return(nil, errors.New("connection refused"))
+				for _, request := range requests {
+					s.storage.EXPECT().
+						MarkProcessed(gomock.Any(), request.ID, domain.RequestStatusPending)
+				}
+			},
+			expErr: true,
+		},
+		{
+			name: "no pending requests",
+			mocksInit: func() {
+				s.storage.EXPECT().
+					ClaimPendingRequests(gomock.Any(), 100).
+					Return(nil, nil)
+			},
 		},
 	}
-	ex := &exchangeMock{
-		rates: func(_ context.Context, _ []string) (map[string]float64, error) {
-			return nil, errors.New("connection refused")
-		},
-	}
-	svc := newService(st, ex)
 
-	err := svc.ProcessPending(context.Background(), 10)
-	if err == nil {
-		t.Fatal("expected error when exchange unavailable")
-	}
+	for _, tc := range tt {
+		s.Run(tc.name, func() {
+			tc.mocksInit()
 
-	if markedStatus != domain.RequestStatusPending {
-		t.Fatalf("expected request released to pending, got %s", markedStatus)
-	}
-}
+			err := s.service.ProcessPending(context.Background(), 100)
 
-func TestGetLastQuote(t *testing.T) {
-	t.Parallel()
+			if tc.expErr {
+				s.Error(err)
+				return
+			}
 
-	updatedAt := time.Now().UTC()
-	st := &storageMock{
-		lastQuote: func(_ context.Context, currency string) (domain.Quote, error) {
-			return domain.Quote{Currency: currency, Price: 18.5, UpdatedAt: updatedAt}, nil
-		},
-	}
-	svc := newService(st, &exchangeMock{})
-
-	quote, err := svc.GetLastQuote(context.Background(), "MXN")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if quote.Price != 18.5 || quote.UpdatedAt != updatedAt {
-		t.Fatalf("unexpected quote: %+v", quote)
+			s.NoError(err)
+		})
 	}
 }

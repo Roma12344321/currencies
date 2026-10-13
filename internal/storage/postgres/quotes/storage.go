@@ -159,7 +159,7 @@ func (s *Storage) MarkProcessed(ctx context.Context, requestID uuid.UUID, status
 	const query = `
 		UPDATE quote_requests
 		SET status = $2, updated_at = $3
-		WHERE id = $1 AND status = 'pending'`
+		WHERE id = $1 AND status IN ('pending', 'processing')`
 
 	_, err := txmanager.GetQuerier(ctx, s.connManager.GetConn()).
 		Exec(ctx, query, requestID, status, time.Now().UTC())

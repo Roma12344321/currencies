@@ -1,3 +1,4 @@
+//go:generate mockgen -source=./handler.go -destination=./mocks/mocks.go -package=mocks
 //nolint:wrapcheck,varnamelen
 package quotes
 
