@@ -1,0 +1,122 @@
+version: "2"
+run:
+  issues-exit-code: 1
+  tests: false
+output:
+  formats:
+    tab:
+      path: stdout
+      print-linter-name: true
+      colors: true
+linters:
+  default: all
+  disable:
+    - depguard
+    - err113
+    - exhaustruct_v5
+    - exhaustruct
+    - gochecknoglobals
+    - godot
+    - godox
+    - gosmopolitan
+    - ireturn
+    - tagalign
+    - tagliatelle
+    - wsl_v5
+    - wsl
+    - noinlineerr
+    - godoclint
+  settings:
+    wrapcheck:
+      ignore-sig-regexps:
+        - \.AddErrorToSpan\(
+    funcorder:
+      constructor: true
+      struct-method: false
+    funlen:
+      lines: 120
+    gosec:
+      excludes:
+        - G115
+    nlreturn:
+      block-size: 2
+    revive:
+      rules:
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-naming
+          arguments:
+            - []
+            - []
+            - - skipPackageNameChecks: true
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1020
+        - -ST1021
+        - -QF1008
+    varnamelen:
+      ignore-decls:
+        - wg *sync.WaitGroup
+        - c echo.Context
+        - ch chan<- prometheus.Metric
+        - ch chan<- *prometheus.Desc
+        - const op
+        - tx pgx.Tx
+  exclusions:
+    generated: lax
+    paths:
+      - .+_test.go
+      - vendor/*
+      - .*/mock
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 100
+  max-same-issues: 4
+  new: false
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/martynov-roman)
+      custom-order: true
+    goimports:
+      local-prefixes:
+        - github.com/martynov-roman
+  exclusions:
+    generated: lax
+    paths:
+      - .+_test.go
+      - vendor/*
+      - .*/mock
+      - third_party$
+      - builtin$
+      - examples$

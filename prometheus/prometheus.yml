@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: currencies
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["currencies:8081"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

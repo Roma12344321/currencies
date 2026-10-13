@@ -1,0 +1,149 @@
+basePath: /
+definitions:
+  common.Response:
+    properties:
+      data: {}
+      error:
+        type: boolean
+      errorText:
+        type: string
+    type: object
+  quotes.CreateQuoteRequestResponse:
+    properties:
+      created:
+        type: boolean
+      createdAt:
+        type: string
+      requestID:
+        type: string
+      status:
+        type: string
+    type: object
+  quotes.QuoteResponse:
+    properties:
+      currency:
+        type: string
+      price:
+        type: number
+      updatedAt:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Сервис асинхронных котировок валютных курсов.
+  title: Currencies API
+  version: "1.0"
+paths:
+  /api/v1/quotes:
+    post:
+      description: |-
+        Регистрирует асинхронный запрос обновления котировки валюты и возвращает его идентификатор.
+        Повторный вызов с той же валютой при незавершённом запросе возвращает существующий идентификатор.
+      parameters:
+      - description: Код валюты (EUR, MXN)
+        example: EUR
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Запрос принят
+          schema:
+            allOf:
+            - $ref: '#/definitions/common.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/quotes.CreateQuoteRequestResponse'
+              type: object
+        "400":
+          description: Некорректный код валюты
+          schema:
+            $ref: '#/definitions/common.Response'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/common.Response'
+      summary: Обновить котировку
+      tags:
+      - quotes
+  /api/v1/quotes/{requestID}:
+    get:
+      description: |-
+        Возвращает значение цены и время обновления по идентификатору запроса.
+        Если обработка ещё не завершена — 404 с соответствующей ошибкой.
+      parameters:
+      - description: Идентификатор запроса
+        example: 0192f4a0-0000-7000-8000-000000000000
+        in: path
+        name: requestID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Значение котировки
+          schema:
+            allOf:
+            - $ref: '#/definitions/common.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/quotes.QuoteResponse'
+              type: object
+        "400":
+          description: Некорректный идентификатор
+          schema:
+            $ref: '#/definitions/common.Response'
+        "404":
+          description: Запрос не найден или котировка не готова
+          schema:
+            $ref: '#/definitions/common.Response'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/common.Response'
+      summary: Получить котировку по идентификатору
+      tags:
+      - quotes
+  /api/v1/quotes/last:
+    get:
+      description: Возвращает последнее сохранённое значение цены и время обновления
+        по коду валюты
+      parameters:
+      - description: Код валюты (EUR, MXN)
+        example: EUR
+        in: query
+        name: currency
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Значение котировки
+          schema:
+            allOf:
+            - $ref: '#/definitions/common.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/quotes.QuoteResponse'
+              type: object
+        "400":
+          description: Некорректный код валюты
+          schema:
+            $ref: '#/definitions/common.Response'
+        "404":
+          description: Котировка не найдена
+          schema:
+            $ref: '#/definitions/common.Response'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/common.Response'
+      summary: Получить последнее значение котировки
+      tags:
+      - quotes
+swagger: "2.0"

@@ -1,0 +1,15 @@
+# IDE
+.idea/
+.vscode/
+
+# Binaries
+/bin/
+/currencies
+
+# Env
+.env
+local/.env
+
+# Build
+*.out
+*.test
