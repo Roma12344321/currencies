@@ -106,11 +106,11 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/martynov-roman)
+        - prefix(github.com/Roma12344321)
       custom-order: true
     goimports:
       local-prefixes:
-        - github.com/martynov-roman
+        - github.com/Roma12344321
   exclusions:
     generated: lax
     paths:

@@ -10,8 +10,8 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	"github.com/martynov-roman/currencies/internal/domain"
-	"github.com/martynov-roman/currencies/internal/transport/http/common"
+	"github.com/Roma12344321/currencies/internal/domain"
+	"github.com/Roma12344321/currencies/internal/transport/http/common"
 )
 
 var (

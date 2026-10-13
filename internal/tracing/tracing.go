@@ -12,7 +12,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/martynov-roman/currencies/internal/config"
+	"github.com/Roma12344321/currencies/internal/config"
 )
 
 func InitTracer(ctx context.Context, cfg *config.Config) (*sdktrace.TracerProvider, error) {

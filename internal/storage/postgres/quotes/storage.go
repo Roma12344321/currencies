@@ -13,9 +13,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/martynov-roman/currencies/internal/domain"
-	txmanager "github.com/martynov-roman/currencies/internal/storage/postgres/tx-manager"
-	"github.com/martynov-roman/currencies/internal/tracing"
+	"github.com/Roma12344321/currencies/internal/domain"
+	txmanager "github.com/Roma12344321/currencies/internal/storage/postgres/tx-manager"
+	"github.com/Roma12344321/currencies/internal/tracing"
 )
 
 type ConnManager interface {

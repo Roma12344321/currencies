@@ -1,4 +1,4 @@
-module github.com/martynov-roman/currencies
+module github.com/Roma12344321/currencies
 
 go 1.27
 

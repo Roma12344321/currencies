@@ -7,19 +7,18 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/Roma12344321/currencies/internal/domain"
 	"github.com/rs/zerolog"
-
-	"github.com/martynov-roman/currencies/internal/domain"
 )
 
 type storageMock struct {
-	getActive   func(ctx context.Context, currency string) (domain.QuoteRequest, error)
-	createReq   func(ctx context.Context, request domain.QuoteRequest) error
-	getByReqID  func(ctx context.Context, requestID uuid.UUID) (domain.Quote, error)
-	lastQuote   func(ctx context.Context, currency string) (domain.Quote, error)
-	claim       func(ctx context.Context, limit int) ([]domain.QuoteRequest, error)
-	mark        func(ctx context.Context, requestID uuid.UUID, status domain.RequestStatus) error
-	save        func(ctx context.Context, quote domain.Quote) error
+	getActive  func(ctx context.Context, currency string) (domain.QuoteRequest, error)
+	createReq  func(ctx context.Context, request domain.QuoteRequest) error
+	getByReqID func(ctx context.Context, requestID uuid.UUID) (domain.Quote, error)
+	lastQuote  func(ctx context.Context, currency string) (domain.Quote, error)
+	claim      func(ctx context.Context, limit int) ([]domain.QuoteRequest, error)
+	mark       func(ctx context.Context, requestID uuid.UUID, status domain.RequestStatus) error
+	save       func(ctx context.Context, quote domain.Quote) error
 }
 
 func (m *storageMock) CreateQuoteRequest(ctx context.Context, r domain.QuoteRequest) error {
@@ -86,8 +85,10 @@ func newService(st storageIface, ex exchangeIface) *Service {
 	return New(zerolog.Nop(), st, ex, txManagerMock{}, supported)
 }
 
-type storageIface = Storage
-type exchangeIface = ExchangeClient
+type (
+	storageIface  = Storage
+	exchangeIface = ExchangeClient
+)
 
 func TestCreateQuoteRequestNew(t *testing.T) {
 	t.Parallel()

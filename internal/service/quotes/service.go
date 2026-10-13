@@ -13,8 +13,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/martynov-roman/currencies/internal/domain"
-	"github.com/martynov-roman/currencies/internal/tracing"
+	"github.com/Roma12344321/currencies/internal/domain"
+	"github.com/Roma12344321/currencies/internal/tracing"
 )
 
 type ExchangeClient interface {

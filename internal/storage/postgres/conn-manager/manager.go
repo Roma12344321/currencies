@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/martynov-roman/currencies/internal/config"
-	"github.com/martynov-roman/currencies/internal/stats"
+	"github.com/Roma12344321/currencies/internal/config"
+	"github.com/Roma12344321/currencies/internal/stats"
 )
 
 type ConnManager struct {

@@ -14,17 +14,17 @@ import (
 	"github.com/labstack/echo/v5"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/martynov-roman/currencies/internal/clients/exchange"
-	"github.com/martynov-roman/currencies/internal/config"
-	quotesService "github.com/martynov-roman/currencies/internal/service/quotes"
-	connManager "github.com/martynov-roman/currencies/internal/storage/postgres/conn-manager"
-	quotesStorage "github.com/martynov-roman/currencies/internal/storage/postgres/quotes"
-	txmanager "github.com/martynov-roman/currencies/internal/storage/postgres/tx-manager"
-	"github.com/martynov-roman/currencies/internal/tracing"
-	server "github.com/martynov-roman/currencies/internal/transport/http"
-	quotesHandler "github.com/martynov-roman/currencies/internal/transport/http/handler/quotes"
-	"github.com/martynov-roman/currencies/internal/transport/http/middleware"
-	"github.com/martynov-roman/currencies/internal/worker"
+	"github.com/Roma12344321/currencies/internal/clients/exchange"
+	"github.com/Roma12344321/currencies/internal/config"
+	quotesService "github.com/Roma12344321/currencies/internal/service/quotes"
+	connManager "github.com/Roma12344321/currencies/internal/storage/postgres/conn-manager"
+	quotesStorage "github.com/Roma12344321/currencies/internal/storage/postgres/quotes"
+	txmanager "github.com/Roma12344321/currencies/internal/storage/postgres/tx-manager"
+	"github.com/Roma12344321/currencies/internal/tracing"
+	server "github.com/Roma12344321/currencies/internal/transport/http"
+	quotesHandler "github.com/Roma12344321/currencies/internal/transport/http/handler/quotes"
+	"github.com/Roma12344321/currencies/internal/transport/http/middleware"
+	"github.com/Roma12344321/currencies/internal/worker"
 )
 
 const shutdownTimeout = 15 * time.Second

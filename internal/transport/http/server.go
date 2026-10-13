@@ -13,9 +13,9 @@ import (
 	"github.com/labstack/echo/v5/middleware"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 
-	_ "github.com/martynov-roman/currencies/docs"
-	"github.com/martynov-roman/currencies/internal/transport/http/handler/quotes"
-	customMw "github.com/martynov-roman/currencies/internal/transport/http/middleware"
+	_ "github.com/Roma12344321/currencies/docs"
+	"github.com/Roma12344321/currencies/internal/transport/http/handler/quotes"
+	customMw "github.com/Roma12344321/currencies/internal/transport/http/middleware"
 )
 
 // @title           Currencies API

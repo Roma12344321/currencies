@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/rs/zerolog"
 
-	"github.com/martynov-roman/currencies/internal/transport/http/common"
+	"github.com/Roma12344321/currencies/internal/transport/http/common"
 )
 
 type RequestDump struct {

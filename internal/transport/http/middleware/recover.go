@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	"github.com/martynov-roman/currencies/internal/transport/http/common"
+	"github.com/Roma12344321/currencies/internal/transport/http/common"
 )
 
 func RecoverMiddleware(next echo.HandlerFunc) echo.HandlerFunc {

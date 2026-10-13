@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/martynov-roman/currencies/internal/tracing"
+	"github.com/Roma12344321/currencies/internal/tracing"
 )
 
 type QuotesProcessor interface {
