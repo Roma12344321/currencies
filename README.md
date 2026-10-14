@@ -37,3 +37,6 @@ docker compose up -d --build
 | `POST` | `/api/v1/quotes?pair=EUR/MXN` | Зарегистрировать запрос обновления пары, вернуть `requestID` (202) |
 | `GET` | `/api/v1/quotes/{requestID}` | Котировка по идентификатору запроса: цена + время (404, пока не готова) |
 | `GET` | `/api/v1/quotes/last?pair=EUR/MXN` | Последнее значение котировки по паре |
+
+Обе валюты пары должны быть из поддерживаемого набора `EXCHANGE_SUPPORTED`
+(по умолчанию `EUR,MXN,USD`); любые комбинации из набора допустимы: `EUR/MXN`, `MXN/EUR`.
